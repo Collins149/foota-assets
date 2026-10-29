@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foota Admin</title>
+<style>
+  :root { color-scheme: dark; }
+  [hidden] { display: none !important; }
+  body { font-family: Arial, sans-serif; margin: 0; background: #101010; color: #eee; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #1b1b1b; position: sticky; top: 0; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  input, select, button { font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid #444; background: #1e1e1e; color: #eee; }
+  button { cursor: pointer; background: #2e7d32; border: 0; color: #fff; }
+  button.secondary { background: #333; }
+  button.danger { background: #b3261e; }
+  .tabs button { margin-right: 6px; }
+  .tabs button.active { background: #1565c0; }
+  label { display: block; margin: 10px 0 4px; font-size: 14px; color: #bbb; }
+  .field input, .field select { width: 100%; box-sizing: border-box; }
+  .row { display: flex; gap: 12px; align-items: center; padding: 12px; margin: 8px 0; background: #1b1b1b; border-radius: 10px; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: #9a9a9a; font-size: 13px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .bar input { flex: 1; min-width: 160px; }
+  .error { color: #ff8a80; margin: 8px 0; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  dialog { width: min(520px, 92vw); border: 1px solid #444; border-radius: 12px; background: #151515; color: #eee; padding: 16px; }
+  dialog::backdrop { background: rgba(0, 0, 0, .6); }
+</style>
+</head>
+<body>
+
+<div id="login" style="max-width:380px;margin:12vh auto;padding:16px;">
+  <h2>Foota Admin</h2>
+  <form id="loginForm">
+    <label for="email">Email</label>
+    <div class="field"><input id="email" type="email" autocomplete="username" required></div>
+    <label for="password">Password</label>
+    <div class="field"><input id="password" type="password" autocomplete="current-password" required></div>
+    <p id="loginError" class="error"></p>
+    <button type="submit">Log in</button>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <strong>Foota Admin</strong>
+    <span><span id="who" class="muted"></span> <button id="logout" class="secondary">Log out</button></span>
+  </header>
+  <main>
+    <p id="error" class="error"></p>
+    <div class="tabs">
+      <button id="tabMatches" class="active">Matches</button>
+      <button id="tabLeagues" class="secondary">Leagues</button>
+    </div>
+
+    <section id="matchesSection">
+      <div class="bar">
+        <input id="search" placeholder="Search teams or league">
+        <select id="filter">
+          <option value="all">All</option>
+          <option value="nostream">No stream link</option>
+          <option value="stream">With stream link</option>
+          <option value="manual">Manual only</option>
+        </select>
+        <button id="addMatch">+ Add match</button>
+      </div>
+      <p id="matchCount" class="muted"></p>
+      <div id="matchList"></div>
+    </section>
+
+    <section id="leaguesSection" hidden>
+      <div class="bar"><button id="addLeague">+ Add league</button></div>
+      <div id="leagueList"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="editor">
+  <form id="editorForm">
+    <h3 id="editorTitle"></h3>
+    <div class="manualOnly">
+      <div class="two">
+        <div class="field"><label>Home team</label><input id="f_homeTeam"></div>
+        <div class="field"><label>Away team</label><input id="f_awayTeam"></div>
+      </div>
+      <div class="field"><label>League</label><select id="f_league"></select></div>
+      <div class="field"><label>Kickoff</label><input id="f_kickoff" type="datetime-local"></div>
+      <div class="two">
+        <div class="field"><label>Status</label>
+          <select id="f_status">
+            <option>UPCOMING</option><option>LIVE</option><option>FINISHED</option><option>POSTPONED</option>
+          </select>
+        </div>
+        <div class="field"><label>Minute (for example 34')</label><input id="f_minute"></div>
+      </div>
+      <div class="two">
+        <div class="field"><label>Home score</label><input id="f_homeScore" type="number" min="0"></div>
+        <div class="field"><label>Away score</label><input id="f_awayScore" type="number" min="0"></div>
+      </div>
+      <div class="field"><label>Home logo link</label><input id="f_homeLogo"></div>
+      <div class="field"><label>Away logo link</label><input id="f_awayLogo"></div>
+    </div>
+    <div class="field"><label>Stream link (https://...)</label><input id="f_streamUrl"></div>
+    <div class="field"><label>Poster image link</label><input id="f_posterUrl"></div>
+    <p id="editorMsg" class="error"></p>
+    <div class="bar">
+      <button type="submit">Save</button>
+      <button type="button" id="cancelEdit" class="secondary">Cancel</button>
+      <button type="button" id="deleteBtn" class="danger">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="leagueEditor">
+  <form id="leagueForm">
+    <h3 id="leagueTitle"></h3>
+    <div class="field"><label>Name (must match the league text on matches)</label><input id="l_name"></div>
+    <div class="field"><label>Country</label><input id="l_country"></div>
+    <div class="field"><label>Sort order (1 shows first)</label><input id="l_sortOrder" type="number"></div>
+    <div class="field"><label>Logo link</label><input id="l_logoUrl"></div>
+    <p id="leagueMsg" class="error"></p>
+    <div class="bar">
+      <button type="submit">Save</button>
+      <button type="button" id="cancelLeague" class="secondary">Cancel</button>
+      <button type="button" id="deleteLeague" class="danger">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, Timestamp }
+  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+// PASTE YOUR FIREBASE WEB SETTINGS HERE
+const firebaseConfig = {
+  apiKey: "PASTE",
+  authDomain: "PASTE",
+  projectId: "PASTE",
+  storageBucket: "PASTE",
+  messagingSenderId: "PASTE",
+  appId: "PASTE"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let matches = [];
+let leagues = [];
+let listeners = [];
+let editingMatchId = null;
+let editingLeagueId = null;
+
+/* ---------- Login ---------- */
+$("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("loginError").textContent = "";
+  try {
+    await signInWithEmailAndPassword(auth, $("email").value.trim(), $("password").value);
+  } catch (err) {
+    $("loginError").textContent = "Login failed: " + err.code;
+  }
+});
+$("logout").addEventListener("click", () => signOut(auth));
+
+onAuthStateChanged(auth, (user) => {
+  listeners.forEach((stop) => stop());
+  listeners = [];
+  if (user) {
+    $("login").hidden = true;
+    $("app").hidden = false;
+    $("who").textContent = user.email;
+    startListening();
+  } else {
+    $("login").hidden = false;
+    $("app").hidden = true;
+  }
+});
+
+function showError(err) {
+  $("error").textContent = "Error: " + err.code + " " + err.message;
+}
+
+function startListening() {
+  listeners.push(onSnapshot(collection(db, "matches"), (snap) => {
+    matches = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderMatches();
+  }, showError));
+
+  listeners.push(onSnapshot(collection(db, "leagues"), (snap) => {
+    leagues = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    renderLeagues();
+    fillLeagueSelect();
+  }, showError));
+}
+
+/* ---------- Tabs ---------- */
+function showTab(name) {
+  const isMatches = name === "matches";
+  $("matchesSection").hidden = !isMatches;
+  $("leaguesSection").hidden = isMatches;
+  $("tabMatches").className = isMatches ? "active" : "secondary";
+  $("tabLeagues").className = isMatches ? "secondary" : "active";
+}
+$("tabMatches").addEventListener("click", () => showTab("matches"));
+$("tabLeagues").addEventListener("click", () => showTab("leagues"));
+
+/* ---------- Matches ---------- */
+function toLocalInput(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function kickoffText(m) {
+  if (!m.kickoff || !m.kickoff.toDate) return "no time";
+  return m.kickoff.toDate().toLocaleString([], {
+    weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+}
+
+function rowHtml(m) {
+  const synced = m.id.startsWith("fd_");
+  return `<div class="row">
+    <div class="grow">
+      <strong>${esc(m.homeTeam)} vs ${esc(m.awayTeam)}</strong>
+      <div class="muted">${esc(m.league)} &bull; ${esc(kickoffText(m))} &bull; ${esc(m.status)} &bull; ${m.views ?? 0} views</div>
+      <div class="muted">${m.streamUrl ? "stream set" : "no stream"}${m.posterUrl ? " &bull; poster set" : ""} &bull; ${synced ? "synced" : "manual"}</div>
+    </div>
+    <button data-edit="${esc(m.id)}">Edit</button>
+  </div>`;
+}
+
+function renderMatches() {
+  const q = $("search").value.trim().toLowerCase();
+  const filter = $("filter").value;
+  const list = matches
+    .filter((m) => !q || `${m.homeTeam} ${m.awayTeam} ${m.league}`.toLowerCase().includes(q))
+    .filter((m) =>
+      filter === "all" ||
+      (filter === "stream" && m.streamUrl) ||
+      (filter === "nostream" && !m.streamUrl) ||
+      (filter === "manual" && !m.id.startsWith("fd_")))
+    .sort((a, b) => (a.kickoff?.seconds ?? 0) - (b.kickoff?.seconds ?? 0));
+
+  $("matchCount").textContent = list.length + " matches";
+  $("matchList").innerHTML = list.map(rowHtml).join("") || "<p class='muted'>No matches.</p>";
+}
+
+$("search").addEventListener("input", renderMatches);
+$("filter").addEventListener("change", renderMatches);
+$("matchList").addEventListener("click", (e) => {
+  const id = e.target.dataset.edit;
+  if (id) openEditor(id);
+});
+$("addMatch").addEventListener("click", () => openEditor(null));
+
+function fillLeagueSelect() {
+  const current = $("f_league").value;
+  $("f_league").innerHTML = leagues
+    .map((l) => `<option value="${esc(l.name)}">${esc(l.name)}</option>`).join("");
+  if (current) $("f_league").value = current;
+}
+
+function openEditor(id) {
+  editingMatchId = id;
+  const m = id ? (matches.find((x) => x.id === id) || {}) : {};
+  const synced = !!id && id.startsWith("fd_");
+
+  $("editorTitle").textContent = id
+    ? (synced ? "Edit synced match (links only)" : "Edit manual match")
+    : "Add manual match";
+  document.querySelectorAll(".manualOnly").forEach((el) => (el.hidden = synced));
+
+  $("f_homeTeam").value = m.homeTeam ?? "";
+  $("f_awayTeam").value = m.awayTeam ?? "";
+  $("f_league").value = m.league ?? "";
+  $("f_kickoff").value = m.kickoff && m.kickoff.toDate ? toLocalInput(m.kickoff.toDate()) : "";
+  $("f_status").value = m.status ?? "UPCOMING";
+  $("f_minute").value = m.minute ?? "";
+  $("f_homeScore").value = m.homeScore ?? 0;
+  $("f_awayScore").value = m.awayScore ?? 0;
+  $("f_homeLogo").value = m.homeLogo ?? "";
+  $("f_awayLogo").value = m.awayLogo ?? "";
+  $("f_streamUrl").value = m.streamUrl ?? "";
+  $("f_posterUrl").value = m.posterUrl ?? "";
+
+  $("deleteBtn").hidden = !id || synced;
+  $("editorMsg").textContent = "";
+  $("editor").showModal();
+}
+
+$("cancelEdit").addEventListener("click", () => $("editor").close());
+
+$("editorForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const synced = !!editingMatchId && editingMatchId.startsWith("fd_");
+  const links = {
+    streamUrl: $("f_streamUrl").value.trim(),
+    posterUrl: $("f_posterUrl").value.trim()
+  };
+
+  try {
+    if (synced) {
+      await updateDoc(doc(db, "matches", editingMatchId), links);
+    } else {
+      const homeTeam = $("f_homeTeam").value.trim();
+      const awayTeam = $("f_awayTeam").value.trim();
+      const league = $("f_league").value;
+      const kickoffValue = $("f_kickoff").value;
+      if (!homeTeam || !awayTeam || !league || !kickoffValue) {
+        $("editorMsg").textContent = "Teams, league and kickoff are required.";
+        return;
+      }
+      const data = {
+        homeTeam, awayTeam, league,
+        kickoff: Timestamp.fromDate(new Date(kickoffValue)),
+        status: $("f_status").value,
+        minute: $("f_minute").value.trim(),
+        homeScore: Number($("f_homeScore").value) || 0,
+        awayScore: Number($("f_awayScore").value) || 0,
+        homeLogo: $("f_homeLogo").value.trim(),
+        awayLogo: $("f_awayLogo").value.trim(),
+        ...links
+      };
+      if (editingMatchId) {
+        await updateDoc(doc(db, "matches", editingMatchId), data);
+      } else {
+        await addDoc(collection(db, "matches"), { ...data, views: 0 });
+      }
+    }
+    $("editor").close();
+  } catch (err) {
+    $("editorMsg").textContent = "Save failed: " + err.code;
+  }
+});
+
+$("deleteBtn").addEventListener("click", async () => {
+  if (!editingMatchId || editingMatchId.startsWith("fd_")) return;
+  if (!confirm("Delete this match?")) return;
+  try {
+    await deleteDoc(doc(db, "matches", editingMatchId));
+    $("editor").close();
+  } catch (err) {
+    $("editorMsg").textContent = "Delete failed: " + err.code;
+  }
+});
+
+/* ---------- Leagues ---------- */
+function renderLeagues() {
+  $("leagueList").innerHTML = leagues.map((l) => `<div class="row">
+    <div class="grow">
+      <strong>${esc(l.name)}</strong>
+      <div class="muted">${esc(l.country)} &bull; order ${l.sortOrder ?? 0} &bull; ${l.logoUrl ? "logo set" : "no logo"}</div>
+    </div>
+    <button data-league="${esc(l.id)}">Edit</button>
+  </div>`).join("") || "<p class='muted'>No leagues.</p>";
+}
+
+$("leagueList").addEventListener("click", (e) => {
+  const id = e.target.dataset.league;
+  if (id) openLeagueEditor(id);
+});
+$("addLeague").addEventListener("click", () => openLeagueEditor(null));
+
+function openLeagueEditor(id) {
+  editingLeagueId = id;
+  const l = id ? (leagues.find((x) => x.id === id) || {}) : {};
+  $("leagueTitle").textContent = id ? "Edit league" : "Add league";
+  $("l_name").value = l.name ?? "";
+  $("l_name").readOnly = !!id;
+  $("l_country").value = l.country ?? "";
+  $("l_sortOrder").value = l.sortOrder ?? (leagues.length + 1);
+  $("l_logoUrl").value = l.logoUrl ?? "";
+  $("deleteLeague").hidden = !id;
+  $("leagueMsg").textContent = "";
+  $("leagueEditor").showModal();
+}
+
+$("cancelLeague").addEventListener("click", () => $("leagueEditor").close());
+
+$("leagueForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("l_name").value.trim();
+  if (!name) {
+    $("leagueMsg").textContent = "Name is required.";
+    return;
+  }
+  const data = {
+    name,
+    country: $("l_country").value.trim(),
+    sortOrder: Number($("l_sortOrder").value) || 0,
+    logoUrl: $("l_logoUrl").value.trim()
+  };
+  try {
+    if (editingLeagueId) {
+      await updateDoc(doc(db, "leagues", editingLeagueId), data);
+    } else {
+      await addDoc(collection(db, "leagues"), data);
+    }
+    $("leagueEditor").close();
+  } catch (err) {
+    $("leagueMsg").textContent = "Save failed: " + err.code;
+  }
+});
+
+$("deleteLeague").addEventListener("click", async () => {
+  if (!editingLeagueId) return;
+  if (!confirm("Delete this league? Its matches will no longer be listed under it.")) return;
+  try {
+    await deleteDoc(doc(db, "leagues", editingLeagueId));
+    $("leagueEditor").close();
+  } catch (err) {
+    $("leagueMsg").textContent = "Delete failed: " + err.code;
+  }
+});
+</script>
+</body>
+</html>
