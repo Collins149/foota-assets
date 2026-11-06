@@ -24,7 +24,11 @@
   .bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
   .bar input { flex: 1; min-width: 160px; }
   .error { color: #ff8a80; margin: 8px 0; }
+  .ok { color: #81c784; margin: 8px 0; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .switch { display: flex; align-items: center; gap: 12px; margin: 0; font-size: 16px; color: #eee; cursor: pointer; }
+  .switch input { width: 22px; height: 22px; padding: 0; flex: none; }
+  .switch.master { font-weight: bold; }
   dialog { width: min(520px, 92vw); border: 1px solid #444; border-radius: 12px; background: #151515; color: #eee; padding: 16px; }
   dialog::backdrop { background: rgba(0, 0, 0, .6); }
 </style>
@@ -53,6 +57,7 @@
     <div class="tabs">
       <button id="tabMatches" class="active">Matches</button>
       <button id="tabLeagues" class="secondary">Leagues</button>
+      <button id="tabAds" class="secondary">Ads</button>
     </div>
 
     <section id="matchesSection">
@@ -73,6 +78,29 @@
     <section id="leaguesSection" hidden>
       <div class="bar"><button id="addLeague">+ Add league</button></div>
       <div id="leagueList"></div>
+    </section>
+
+    <section id="adsSection" hidden>
+      <p class="muted">Changes reach the app within seconds. If these settings can't be read, the app shows banner ads only.</p>
+      <form id="adsForm">
+        <div class="row"><label class="switch master"><input type="checkbox" id="a_adsEnabled"> All ads (master switch)</label></div>
+        <div class="row"><label class="switch"><input type="checkbox" id="a_bannerEnabled"> Banner ads</label></div>
+        <div class="row"><label class="switch"><input type="checkbox" id="a_nativeEnabled"> Native ads (in lists)</label></div>
+        <div class="row"><label class="switch"><input type="checkbox" id="a_interstitialEnabled"> Interstitial ads</label></div>
+        <div class="row"><label class="switch"><input type="checkbox" id="a_appOpenEnabled"> App open ads</label></div>
+
+        <div class="row" style="display:block">
+          <div class="field"><label for="a_interstitialMinSeconds">Interstitial: minimum seconds between ads (60 or more)</label>
+            <input id="a_interstitialMinSeconds" type="number" min="60"></div>
+          <div class="field"><label for="a_interstitialEveryNPages">Interstitial: page changes before one can show (2 or more)</label>
+            <input id="a_interstitialEveryNPages" type="number" min="2"></div>
+          <div class="field"><label for="a_appOpenMinHours">App open: minimum hours between ads (1 or more)</label>
+            <input id="a_appOpenMinHours" type="number" min="1"></div>
+        </div>
+
+        <p id="adsMsg" class="error"></p>
+        <div class="bar"><button type="submit">Save ad settings</button></div>
+      </form>
     </section>
   </main>
 </div>
@@ -133,7 +161,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, Timestamp }
+import { getFirestore, collection, onSnapshot, doc, addDoc, updateDoc, deleteDoc, setDoc, Timestamp }
   from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 // PASTE YOUR FIREBASE WEB SETTINGS HERE
@@ -203,18 +231,80 @@ function startListening() {
     renderLeagues();
     fillLeagueSelect();
   }, showError));
+
+  listeners.push(onSnapshot(doc(db, "config", "ads"), (snap) => {
+    fillAdsForm(snap.exists() ? snap.data() : {});
+  }, showError));
 }
 
 /* ---------- Tabs ---------- */
 function showTab(name) {
-  const isMatches = name === "matches";
-  $("matchesSection").hidden = !isMatches;
-  $("leaguesSection").hidden = isMatches;
-  $("tabMatches").className = isMatches ? "active" : "secondary";
-  $("tabLeagues").className = isMatches ? "secondary" : "active";
+  $("matchesSection").hidden = name !== "matches";
+  $("leaguesSection").hidden = name !== "leagues";
+  $("adsSection").hidden = name !== "ads";
+  $("tabMatches").className = name === "matches" ? "active" : "secondary";
+  $("tabLeagues").className = name === "leagues" ? "active" : "secondary";
+  $("tabAds").className = name === "ads" ? "active" : "secondary";
 }
 $("tabMatches").addEventListener("click", () => showTab("matches"));
 $("tabLeagues").addEventListener("click", () => showTab("leagues"));
+$("tabAds").addEventListener("click", () => showTab("ads"));
+
+/* ---------- Ads ---------- */
+// Same cautious defaults as the app: banner only
+const AD_DEFAULTS = {
+  adsEnabled: true,
+  bannerEnabled: true,
+  nativeEnabled: false,
+  interstitialEnabled: false,
+  appOpenEnabled: false,
+  interstitialMinSeconds: 180,
+  interstitialEveryNPages: 3,
+  appOpenMinHours: 4
+};
+
+function fillAdsForm(d) {
+  const v = { ...AD_DEFAULTS, ...d };
+  $("a_adsEnabled").checked = !!v.adsEnabled;
+  $("a_bannerEnabled").checked = !!v.bannerEnabled;
+  $("a_nativeEnabled").checked = !!v.nativeEnabled;
+  $("a_interstitialEnabled").checked = !!v.interstitialEnabled;
+  $("a_appOpenEnabled").checked = !!v.appOpenEnabled;
+  $("a_interstitialMinSeconds").value = v.interstitialMinSeconds;
+  $("a_interstitialEveryNPages").value = v.interstitialEveryNPages;
+  $("a_appOpenMinHours").value = v.appOpenMinHours;
+}
+
+$("adsForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = $("adsMsg");
+  msg.className = "error";
+  msg.textContent = "";
+
+  const num = (id, min, fallback) => {
+    const n = Math.floor(Number($(id).value));
+    return Number.isFinite(n) ? Math.max(min, n) : fallback;
+  };
+
+  const data = {
+    adsEnabled: $("a_adsEnabled").checked,
+    bannerEnabled: $("a_bannerEnabled").checked,
+    nativeEnabled: $("a_nativeEnabled").checked,
+    interstitialEnabled: $("a_interstitialEnabled").checked,
+    appOpenEnabled: $("a_appOpenEnabled").checked,
+    interstitialMinSeconds: num("a_interstitialMinSeconds", 60, 180),
+    interstitialEveryNPages: num("a_interstitialEveryNPages", 2, 3),
+    appOpenMinHours: num("a_appOpenMinHours", 1, 4)
+  };
+
+  try {
+    await setDoc(doc(db, "config", "ads"), data, { merge: true });
+    msg.className = "ok";
+    msg.textContent = "Saved. The app will pick this up within seconds.";
+  } catch (err) {
+    msg.textContent = "Save failed: " + err.code;
+  }
+});
 
 /* ---------- Matches ---------- */
 function toLocalInput(d) {
