@@ -90,10 +90,10 @@
         <div class="row"><label class="switch"><input type="checkbox" id="a_appOpenEnabled"> App open ads</label></div>
 
         <div class="row" style="display:block">
-          <div class="field"><label for="a_interstitialMinSeconds">Interstitial: minimum seconds between ads (60 or more)</label>
-            <input id="a_interstitialMinSeconds" type="number" min="60"></div>
-          <div class="field"><label for="a_interstitialEveryNPages">Interstitial: page changes before one can show (2 or more)</label>
-            <input id="a_interstitialEveryNPages" type="number" min="2"></div>
+          <div class="field"><label for="a_interstitialMinSeconds">Interstitial: minimum seconds between ads (0 = no wait)</label>
+            <input id="a_interstitialMinSeconds" type="number" min="0"></div>
+          <div class="field"><label for="a_interstitialEveryNPages">Interstitial: page leaves before one can show (1 = every time)</label>
+            <input id="a_interstitialEveryNPages" type="number" min="1"></div>
           <div class="field"><label for="a_appOpenMinHours">App open: minimum hours between ads (1 or more)</label>
             <input id="a_appOpenMinHours" type="number" min="1"></div>
         </div>
@@ -292,8 +292,8 @@ $("adsForm").addEventListener("submit", async (e) => {
     nativeEnabled: $("a_nativeEnabled").checked,
     interstitialEnabled: $("a_interstitialEnabled").checked,
     appOpenEnabled: $("a_appOpenEnabled").checked,
-    interstitialMinSeconds: num("a_interstitialMinSeconds", 60, 180),
-    interstitialEveryNPages: num("a_interstitialEveryNPages", 2, 3),
+    interstitialMinSeconds: num("a_interstitialMinSeconds", 0, 180),
+    interstitialEveryNPages: num("a_interstitialEveryNPages", 1, 3),
     appOpenMinHours: num("a_appOpenMinHours", 1, 4)
   };
 
